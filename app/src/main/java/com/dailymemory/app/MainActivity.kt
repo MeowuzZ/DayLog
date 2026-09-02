@@ -2,10 +2,13 @@ package com.dailymemory.app
 
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import android.content.ClipData
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -84,6 +87,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import com.dailymemory.app.data.BackupSummary
 import com.dailymemory.app.data.DailyEntry
 import com.dailymemory.app.data.DailyRepository
@@ -97,6 +101,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+import java.io.File
 import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
@@ -182,6 +187,10 @@ private fun DailyMemoryApp(repository: DailyRepository) {
         else -> "数据与备份"
     }
 
+    BackHandler(enabled = selectedMemberId > 0L) {
+        selectedMemberId = 0L
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -254,8 +263,20 @@ private fun DailyMemoryApp(repository: DailyRepository) {
                     onEdit = { editingMember = it; showMemberDialog = true },
                     onDeleted = { refresh++; selectedMemberId = 0L },
                     onExport = { member, format ->
-                        pendingExport = PendingExport(member, format)
-                        exportLauncher.launch(ExportService.suggestedName(member, format))
+                        if (format == ExportFormat.DOCX) {
+                            runCatching {
+                                shareWordToWeChat(
+                                    context = context,
+                                    member = member,
+                                    entries = repository.entriesForMember(member.id),
+                                    milestones = repository.milestonesForMember(member.id),
+                                )
+                            }.onSuccess { notify("正在打开微信……") }
+                                .onFailure { notify(it.message ?: "无法打开微信分享") }
+                        } else {
+                            pendingExport = PendingExport(member, format)
+                            exportLauncher.launch(ExportService.suggestedName(member, format))
+                        }
                     },
                     onEntryDeleted = { refresh++ },
                     onMilestoneDeleted = { refresh++ },
@@ -1086,7 +1107,7 @@ private fun MemberDialog(
     var tag by remember(member) { mutableStateOf(member?.tag.orEmpty()) }
     var showRankChoices by remember { mutableStateOf(false) }
     var showTagChoices by remember { mutableStateOf(false) }
-    var addingTag by remember { mutableStateOf(false) }
+    var showNewTagDialog by remember { mutableStateOf(false) }
     var newTag by remember { mutableStateOf("") }
 
     AlertDialog(
@@ -1130,27 +1151,8 @@ private fun MemberDialog(
                         }
                         androidx.compose.material3.DropdownMenuItem(
                             text = { Text("＋ 新建标签") },
-                            onClick = { showTagChoices = false; addingTag = true },
+                            onClick = { showTagChoices = false; showNewTagDialog = true },
                         )
-                    }
-                }
-                if (addingTag) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = newTag,
-                            onValueChange = { newTag = it },
-                            label = { Text("新标签") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Button(
-                            enabled = newTag.isNotBlank(),
-                            onClick = {
-                                tag = onAddTag(newTag)
-                                newTag = ""
-                                addingTag = false
-                            },
-                        ) { Text("添加") }
                     }
                 }
             }
@@ -1176,6 +1178,35 @@ private fun MemberDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
+
+    if (showNewTagDialog) {
+        AlertDialog(
+            onDismissRequest = { showNewTagDialog = false; newTag = "" },
+            title = { Text("新建标签") },
+            text = {
+                OutlinedTextField(
+                    value = newTag,
+                    onValueChange = { newTag = it },
+                    label = { Text("标签名称") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                Button(
+                    enabled = newTag.isNotBlank(),
+                    onClick = {
+                        tag = onAddTag(newTag)
+                        newTag = ""
+                        showNewTagDialog = false
+                    },
+                ) { Text("创建并选中") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewTagDialog = false; newTag = "" }) { Text("取消") }
+            },
+        )
+    }
 }
 
 @Composable
@@ -1188,7 +1219,10 @@ private fun ExportFormatDialog(member: Member, onDismiss: () -> Unit, onSelect: 
                 Text("导出内容包含个人档案、大事记、统计与全部日报时间轴。")
                 ExportFormat.values().forEach { format ->
                     OutlinedButton(onClick = { onSelect(format) }, modifier = Modifier.fillMaxWidth()) {
-                        Text("${format.label}  (.${format.extension})")
+                        Text(
+                            if (format == ExportFormat.DOCX) "Word（微信分享）"
+                            else "${format.label}  (.${format.extension})"
+                        )
                     }
                 }
             }
@@ -1222,6 +1256,38 @@ private fun EmptyState(title: String, subtitle: String, compact: Boolean = false
         }
     }
 }
+
+private fun shareWordToWeChat(
+    context: Context,
+    member: Member,
+    entries: List<DailyEntry>,
+    milestones: List<Milestone>,
+) {
+    val exportDirectory = File(context.cacheDir, "shared_exports").apply { mkdirs() }
+    val exportFile = File(exportDirectory, ExportService.suggestedName(member, ExportFormat.DOCX))
+    exportFile.outputStream().use { output ->
+        ExportService.write(output, ExportFormat.DOCX, member, entries, milestones)
+    }
+    val contentUri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        exportFile,
+    )
+    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+        type = ExportFormat.DOCX.mimeType
+        setPackage(WECHAT_PACKAGE)
+        putExtra(Intent.EXTRA_STREAM, contentUri)
+        putExtra(Intent.EXTRA_TITLE, exportFile.name)
+        clipData = ClipData.newUri(context.contentResolver, exportFile.name, contentUri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    require(shareIntent.resolveActivity(context.packageManager) != null) {
+        "未检测到微信，请安装并登录微信后再试"
+    }
+    context.startActivity(shareIntent)
+}
+
+private const val WECHAT_PACKAGE = "com.tencent.mm"
 
 private fun showDatePicker(context: android.content.Context, current: LocalDate, onSelected: (LocalDate) -> Unit) {
     DatePickerDialog(

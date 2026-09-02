@@ -25,12 +25,22 @@ object ExportService {
         milestones: List<Milestone>,
     ) {
         context.contentResolver.openOutputStream(uri, "w")!!.use { output ->
-            when (format) {
-                ExportFormat.DOCX -> writeDocx(output, member, entries, milestones)
-                ExportFormat.PDF -> writePdf(output, member, entries, milestones)
-                ExportFormat.MARKDOWN -> output.write(markdown(member, entries, milestones).toByteArray(Charsets.UTF_8))
-                ExportFormat.TEXT -> output.write(plainText(member, entries, milestones).toByteArray(Charsets.UTF_8))
-            }
+            write(output, format, member, entries, milestones)
+        }
+    }
+
+    fun write(
+        output: OutputStream,
+        format: ExportFormat,
+        member: Member,
+        entries: List<DailyEntry>,
+        milestones: List<Milestone>,
+    ) {
+        when (format) {
+            ExportFormat.DOCX -> writeDocx(output, member, entries, milestones)
+            ExportFormat.PDF -> writePdf(output, member, entries, milestones)
+            ExportFormat.MARKDOWN -> output.write(markdown(member, entries, milestones).toByteArray(Charsets.UTF_8))
+            ExportFormat.TEXT -> output.write(plainText(member, entries, milestones).toByteArray(Charsets.UTF_8))
         }
     }
 
