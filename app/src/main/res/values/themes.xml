@@ -1,9 +1,11 @@
 <resources>
     <style name="Theme.DailyMemory" parent="android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:fontFamily">sans</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:colorAccent">#FF706D</item>
+        <item name="android:windowLightNavigationBar">true</item>
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:statusBarColor">#FFF8F2</item>
-        <item name="android:navigationBarColor">#FFF8F2</item>
+        <item name="android:statusBarColor">#FFF4F5</item>
+        <item name="android:navigationBarColor">#FFF4F5</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
 </resources>

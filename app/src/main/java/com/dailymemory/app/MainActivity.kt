@@ -14,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -34,33 +35,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -94,7 +78,18 @@ import com.dailymemory.app.data.MemberStats
 import com.dailymemory.app.data.Milestone
 import com.dailymemory.app.export.ExportService
 import com.dailymemory.app.export.WeChatShareService
-import com.dailymemory.app.ui.DailyMemoryTheme
+import com.dailymemory.app.ui.*
+import android.app.Activity
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.graphics.toArgb
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
@@ -166,66 +161,52 @@ private fun DailyMemoryApp(repository: DailyRepository) {
         selectedMemberId = 0L
     }
 
+    val addAction: () -> Unit = {
+        when (tab) {
+            MainTab.HOME -> showEntryDialog = true
+            MainTab.MEMBERS -> { editingMember = null; showMemberDialog = true }
+            MainTab.MILESTONES -> showMilestoneDialog = true
+            MainTab.SETTINGS -> Unit
+        }
+    }
+    val addDescription = when (tab) {
+        MainTab.HOME -> "添加日报"
+        MainTab.MEMBERS -> "添加成员"
+        MainTab.MILESTONES -> "添加大事记"
+        MainTab.SETTINGS -> ""
+    }
+    val window = (context as? Activity)?.window
+    SideEffect {
+        window?.let {
+            it.statusBarColor = (if (tab == MainTab.SETTINGS && selectedMemberId == 0L) JournalColors.Hero else JournalColors.Background).toArgb()
+            it.navigationBarColor = Color.White.toArgb()
+            WindowInsetsControllerCompat(it, it.decorView).apply {
+                isAppearanceLightStatusBars = true
+                isAppearanceLightNavigationBars = true
+            }
+        }
+    }
+
     Scaffold(
+        containerColor = JournalColors.Background,
         topBar = {
-            TopAppBar(
-                title = { Text(title, fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    if (selectedMemberId > 0) {
-                        TextButton(onClick = { selectedMemberId = 0L }) { Text("‹ 返回") }
-                    }
-                },
-                actions = {
-                    if (selectedMemberId == 0L && tab != MainTab.SETTINGS) {
-                        IconButton(
-                            onClick = {
-                                when (tab) {
-                                    MainTab.HOME -> showEntryDialog = true
-                                    MainTab.MEMBERS -> {
-                                        editingMember = null
-                                        showMemberDialog = true
-                                    }
-                                    MainTab.MILESTONES -> showMilestoneDialog = true
-                                    MainTab.SETTINGS -> Unit
-                                }
-                            },
-                        ) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = when (tab) {
-                                    MainTab.HOME -> "添加日报"
-                                    MainTab.MEMBERS -> "添加成员"
-                                    MainTab.MILESTONES -> "添加大事记"
-                                    MainTab.SETTINGS -> null
-                                },
-                            )
-                        }
-                    }
-                },
-            )
+            if (selectedMemberId > 0L || (tab != MainTab.HOME && tab != MainTab.SETTINGS)) {
+                JournalTopBar(
+                    title = title,
+                    onBack = { if (selectedMemberId > 0L) selectedMemberId = 0L else tab = MainTab.HOME },
+                    onAction = if (selectedMemberId == 0L) addAction else null,
+                    actionDescription = addDescription,
+                )
+            }
         },
         bottomBar = {
             if (selectedMemberId == 0L) {
-                NavigationBar {
-                    MainTab.values().forEach { item ->
-                        NavigationBarItem(
-                            selected = tab == item,
-                            onClick = { tab = item },
-                            icon = {
-                                Icon(
-                                    when (item) {
-                                        MainTab.HOME -> Icons.Default.Home
-                                        MainTab.MEMBERS -> Icons.Default.Person
-                                        MainTab.MILESTONES -> Icons.Default.Star
-                                        MainTab.SETTINGS -> Icons.Default.Settings
-                                    },
-                                    contentDescription = item.label,
-                                )
-                            },
-                            label = { Text(item.label) },
-                        )
-                    }
-                }
+                FruitNavigationBar(MainTab.values().map { it.label }, tab.ordinal) { tab = MainTab.values()[it] }
+            }
+        },
+        floatingActionButton = {
+            if (selectedMemberId == 0L && tab != MainTab.SETTINGS) {
+                JournalAddButton(addDescription, addAction)
             }
         },
     ) { padding ->
@@ -276,6 +257,8 @@ private fun DailyMemoryApp(repository: DailyRepository) {
                     onDelete = { repository.deleteMilestone(it.id); refresh++ },
                 )
                 else -> SettingsScreen(
+                    repository = repository,
+                    refresh = refresh,
                     onBackup = {
                         runCatching {
                             WeChatShareService.share(
@@ -335,14 +318,14 @@ private fun DailyMemoryApp(repository: DailyRepository) {
     }
 
     restoreCandidate?.let { candidate ->
-        AlertDialog(
+        JournalDialog(
             onDismissRequest = { restoreCandidate = null },
             title = { Text("确认恢复备份？") },
             text = {
                 Text("备份包含 ${candidate.second.members} 位成员、${candidate.second.entries} 篇日报和 ${candidate.second.milestones} 条大事记。\n\n恢复会用备份内容替换当前所有数据，建议先导出一份当前备份。")
             },
             confirmButton = {
-                Button(onClick = {
+                JournalButton(onClick = {
                     runCatching { repository.restoreBackup(candidate.first) }
                         .onSuccess { refresh++; restoreCandidate = null; notify("已恢复 ${it.members} 位成员、${it.entries} 篇日报和 ${it.milestones} 条大事记") }
                         .onFailure { notify("恢复失败：${it.message}") }
@@ -361,8 +344,7 @@ private fun HomeScreen(
     onSelectedDateChange: (String) -> Unit,
 ) {
     val selectedDate = runCatching { LocalDate.parse(selectedDateText) }.getOrDefault(LocalDate.now())
-    var monthText by rememberSaveable { mutableStateOf(YearMonth.from(selectedDate).toString()) }
-    val month = runCatching { YearMonth.parse(monthText) }.getOrDefault(YearMonth.from(selectedDate))
+    val month = YearMonth.from(selectedDate)
     val counts = remember(month, refresh) {
         buildMap {
             putAll(repository.entryCountsForMonth(month.minusMonths(1).toString()))
@@ -372,10 +354,9 @@ private fun HomeScreen(
     }
     val entries = remember(selectedDate, refresh) { repository.entriesForDate(selectedDate.toString()) }
     val listState = rememberLazyListState()
-    val density = LocalDensity.current
-    val expandedHeightPx = with(density) { 360.dp.toPx() }
-    val collapsedHeightPx = with(density) { 140.dp.toPx() }
-    val collapseRangePx = expandedHeightPx - collapsedHeightPx
+    val rowCount = (month.atDay(1).dayOfWeek.value - 1 + month.lengthOfMonth() + 6) / 7
+    val expandedHeight = (62 + 30 + rowCount * 60 + 24).dp
+    val collapseRangePx = with(LocalDensity.current) { ((rowCount - 1) * 60).dp.toPx() }
     val collapseState = remember(collapseRangePx) { CalendarCollapseState(collapseRangePx) }
     val nestedScrollConnection = remember(collapseState) {
         object : NestedScrollConnection {
@@ -385,12 +366,7 @@ private fun HomeScreen(
                 collapseState.offsetPx += consumed
                 return Offset(0f, -consumed)
             }
-
-            override fun onPostScroll(
-                consumed: Offset,
-                available: Offset,
-                source: NestedScrollSource,
-            ): Offset {
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
                 if (available.y <= 0f || collapseState.offsetPx <= 0f) return Offset.Zero
                 val expanded = available.y.coerceAtMost(collapseState.offsetPx)
                 collapseState.offsetPx -= expanded
@@ -398,78 +374,47 @@ private fun HomeScreen(
             }
         }
     }
-    val selectDate: (LocalDate) -> Unit = { date ->
-        monthText = YearMonth.from(date).toString()
-        onSelectedDateChange(date.toString())
-    }
-
-    Column(Modifier.fillMaxSize().nestedScroll(nestedScrollConnection)) {
-        CollapsibleCalendarCard(
-            month = month,
-            selectedDate = selectedDate,
-            counts = counts,
-            collapseState = collapseState,
-            onMonthChange = {
-                monthText = it.toString()
-                val day = selectedDate.dayOfMonth.coerceAtMost(it.lengthOfMonth())
-                onSelectedDateChange(it.atDay(day).toString())
-            },
-            onDateSelected = selectDate,
-            onWeekChange = selectDate,
-        )
-        Text(
-            text = "${selectedDate.format(DateTimeFormatter.ofPattern("M月d日"))} · ${entries.size} 篇日报",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-        )
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            if (entries.isEmpty()) {
-                item {
-                    Box(Modifier.fillParentMaxHeight(), contentAlignment = Alignment.Center) {
-                        EmptyState("当天还没有录入日报", "点击右上角 + 开始收集", compact = true)
-                    }
-                }
-            } else {
-                items(entries, key = { it.id }) { TimelineEntry(it) }
+    val selectDate: (LocalDate) -> Unit = { onSelectedDateChange(it.toString()) }
+    val scope = rememberCoroutineScope()
+    val isCalendarCollapsed by remember(collapseState) { derivedStateOf { collapseState.fraction >= .5f } }
+    fun toggleCalendar() {
+        scope.launch {
+            animate(collapseState.offsetPx, if (collapseState.fraction < .5f) collapseState.maxOffsetPx else 0f, animationSpec = tween(220)) { value, _ ->
+                collapseState.offsetPx = value
             }
         }
     }
-}
-
-@Composable
-private fun CollapsibleCalendarCard(
-    month: YearMonth,
-    selectedDate: LocalDate,
-    counts: Map<String, Int>,
-    collapseState: CalendarCollapseState,
-    onMonthChange: (YearMonth) -> Unit,
-    onDateSelected: (LocalDate) -> Unit,
-    onWeekChange: (LocalDate) -> Unit,
-) {
-    Box(
-        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp).fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .collapsibleCalendarHeight(collapseState, 360.dp),
-    ) {
-        Card(
-            modifier = Modifier.fillMaxSize(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f)),
-        ) {
+    Column(Modifier.fillMaxSize().nestedScroll(nestedScrollConnection)) {
+        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(0.dp)).collapsibleCalendarHeight(collapseState, expandedHeight)) {
             MorphingCalendar(
-                month = month,
-                selectedDate = selectedDate,
-                counts = counts,
-                collapseState = collapseState,
-                onMonthChange = onMonthChange,
-                onDateSelected = onDateSelected,
-                onWeekChange = onWeekChange,
+                month, selectedDate, counts, rowCount, collapseState,
+                onMonthChange = { selectDate(it.atDay(selectedDate.dayOfMonth.coerceAtMost(it.lengthOfMonth()))) },
+                onDateSelected = selectDate,
+                onWeekChange = selectDate,
             )
+        }
+        Box(Modifier.fillMaxWidth().height(24.dp).clickable { toggleCalendar() },contentAlignment=Alignment.Center) {
+            JournalIcon(if(isCalendarCollapsed) JournalSymbol.DOWN else JournalSymbol.UP,
+                if(isCalendarCollapsed) "展开月历" else "收起月历",Modifier.size(22.dp),JournalColors.Border)
+        }
+        Row(Modifier.fillMaxWidth().padding(horizontal=18.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
+            Text(if(selectedDate==LocalDate.now()) "今日" else selectedDate.format(DateTimeFormatter.ofPattern("M月d日")),
+                Modifier.weight(1f),fontSize=17.sp,color=JournalColors.Muted)
+            Text("${entries.size}",fontSize=16.sp,color=JournalColors.Muted)
+            Spacer(Modifier.width(7.dp))
+            JournalIcon(JournalSymbol.DOWN,modifier=Modifier.size(15.dp),color=JournalColors.Muted)
+        }
+        LazyColumn(
+            state=listState,
+            modifier=Modifier.fillMaxWidth().weight(1f),
+            contentPadding=PaddingValues(start=18.dp,end=18.dp,bottom=100.dp),
+            verticalArrangement=Arrangement.spacedBy(3.dp),
+        ) {
+            if(entries.isEmpty()) item {
+                Box(Modifier.fillMaxWidth().heightIn(min=210.dp),contentAlignment=Alignment.Center) {
+                    EmptyState("当天还没有日报", "点击“+”记录今天的成长", compact=true)
+                }
+            } else items(entries,key={it.id}) { TimelineEntry(it) }
         }
     }
 }
@@ -478,76 +423,58 @@ private fun Modifier.collapsibleCalendarHeight(
     state: CalendarCollapseState,
     expandedHeight: androidx.compose.ui.unit.Dp,
 ): Modifier = layout { measurable, constraints ->
-    val expandedHeightPx = expandedHeight.roundToPx().coerceIn(constraints.minHeight, constraints.maxHeight)
-    val currentHeightPx = (expandedHeightPx - state.offsetPx.roundToInt())
-        .coerceIn((expandedHeightPx - state.maxOffsetPx).roundToInt(), expandedHeightPx)
-    val placeable = measurable.measure(
-        constraints.copy(minHeight = expandedHeightPx, maxHeight = expandedHeightPx)
-    )
-    layout(placeable.width, currentHeightPx) { placeable.placeRelative(0, 0) }
+    val expandedHeightPx = (expandedHeight - 24.dp).roundToPx().coerceIn(constraints.minHeight, constraints.maxHeight)
+    val minimumHeight = (expandedHeightPx - state.maxOffsetPx).roundToInt().coerceIn(0, expandedHeightPx)
+    val currentHeightPx = (expandedHeightPx - state.offsetPx.roundToInt()).coerceIn(minimumHeight, expandedHeightPx)
+    val placeable = measurable.measure(constraints.copy(minHeight=expandedHeightPx,maxHeight=expandedHeightPx))
+    layout(placeable.width,currentHeightPx) { placeable.placeRelative(0,0) }
 }
 
 @Composable
 private fun MorphingCalendar(
     month: YearMonth,
     selectedDate: LocalDate,
-    counts: Map<String, Int>,
+    counts: Map<String,Int>,
+    rowCount: Int,
     collapseState: CalendarCollapseState,
     onMonthChange: (YearMonth) -> Unit,
     onDateSelected: (LocalDate) -> Unit,
     onWeekChange: (LocalDate) -> Unit,
 ) {
-    val firstOffset = month.atDay(1).dayOfWeek.value - 1
-    val gridStart = month.atDay(1).minusDays(firstOffset.toLong())
-    val selectedWeek = (((selectedDate.toEpochDay() - gridStart.toEpochDay()) / 7).toInt()).coerceIn(0, 5)
-    val weekStart = gridStart.plusWeeks(selectedWeek.toLong())
-    val regularRowHeight = 44.dp
-    val selectedRowTranslation = with(LocalDensity.current) { -(selectedWeek * regularRowHeight.toPx()) }
-
+    val context=LocalContext.current
+    val gridStart=month.atDay(1).minusDays((month.atDay(1).dayOfWeek.value-1).toLong())
+    val selectedWeek=((selectedDate.toEpochDay()-gridStart.toEpochDay())/7).toInt().coerceIn(0,rowCount-1)
+    val translation=with(LocalDensity.current) { -(selectedWeek*60.dp.toPx()) }
     Column(Modifier.fillMaxSize()) {
-        CalendarHeader(
-            title = "${selectedDate.year}年${selectedDate.monthValue}月",
-            expandedSubtitle = "上滑日报可收起月历",
-            compactSubtitle = "${weekStart.monthValue}月${weekStart.dayOfMonth}日 — ${weekStart.plusDays(6).monthValue}月${weekStart.plusDays(6).dayOfMonth}日",
-            collapseState = collapseState,
-            onPrevious = {
-                if (collapseState.fraction >= .6f) onWeekChange(selectedDate.minusWeeks(1))
-                else onMonthChange(month.minusMonths(1))
-            },
-            onNext = {
-                if (collapseState.fraction >= .6f) onWeekChange(selectedDate.plusWeeks(1))
-                else onMonthChange(month.plusMonths(1))
-            },
-        )
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp).height(26.dp)) {
-            listOf("一", "二", "三", "四", "五", "六", "日").forEach {
-                Text(it, Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.fillMaxWidth().height(62.dp).padding(horizontal=6.dp),verticalAlignment=Alignment.CenterVertically) {
+            IconButton(onClick={ if(collapseState.fraction>=.6f) onWeekChange(selectedDate.minusWeeks(1)) else onMonthChange(month.minusMonths(1)) }) {
+                JournalIcon(JournalSymbol.BACK,"上一月或上一周",Modifier.size(23.dp))
+            }
+            Row(Modifier.weight(1f).heightIn(min=48.dp).clickable { showDatePicker(context,selectedDate,onDateSelected) },
+                horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically) {
+                Text("${month.year}.${month.monthValue.toString().padStart(2,'0')}",fontSize=23.sp,fontWeight=FontWeight.Bold)
+                Spacer(Modifier.width(8.dp))
+                JournalIcon(JournalSymbol.DOWN,"选择日期",Modifier.size(13.dp))
+            }
+            IconButton(onClick={ if(collapseState.fraction>=.6f) onWeekChange(selectedDate.plusWeeks(1)) else onMonthChange(month.plusMonths(1)) }) {
+                JournalIcon(JournalSymbol.NEXT,"下一月或下一周",Modifier.size(23.dp))
             }
         }
-        repeat(6) { week ->
-            val selectedRow = week == selectedWeek
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp)
-                    .height(regularRowHeight)
-                    .graphicsLayer {
-                        val progress = collapseState.fraction
-                        if (selectedRow) {
-                            alpha = 1f
-                            translationY = selectedRowTranslation * progress
-                        } else {
-                            alpha = (1f - progress * 1.8f).coerceIn(0f, 1f)
-                        }
-                    }
-            ) {
+        Row(Modifier.fillMaxWidth().padding(horizontal=7.dp).height(30.dp),verticalAlignment=Alignment.CenterVertically) {
+            listOf("一","二","三","四","五","六","日").forEachIndexed { index,label ->
+                Text(label,Modifier.weight(1f),fontSize=14.sp,textAlign=TextAlign.Center,
+                    color=if(index>=5) JournalColors.Coral else JournalColors.Ink)
+            }
+        }
+        repeat(rowCount) { week ->
+            Row(Modifier.fillMaxWidth().padding(horizontal=7.dp).height(60.dp).graphicsLayer {
+                val progress=collapseState.fraction
+                if(week==selectedWeek) { alpha=1f;translationY=translation*progress }
+                else alpha=(1f-progress*1.8f).coerceIn(0f,1f)
+            }) {
                 repeat(7) { weekday ->
-                    val date = gridStart.plusDays((week * 7 + weekday).toLong())
-                    CalendarDay(
-                        date = date,
-                        selected = date == selectedDate,
-                        hasEntries = (counts[date.toString()] ?: 0) > 0,
-                        muted = date.monthValue != month.monthValue,
-                        onClick = onDateSelected,
-                    )
+                    val date=gridStart.plusDays((week*7+weekday).toLong())
+                    CalendarDay(date,date==selectedDate,(counts[date.toString()]?:0)>0,date.monthValue!=month.monthValue,onDateSelected)
                 }
             }
         }
@@ -555,75 +482,19 @@ private fun MorphingCalendar(
 }
 
 @Composable
-private fun CalendarHeader(
-    title: String,
-    expandedSubtitle: String,
-    compactSubtitle: String,
-    collapseState: CalendarCollapseState,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
-) {
-    Row(
-        Modifier.fillMaxWidth().height(68.dp).padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        TextButton(onClick = onPrevious) { Text("‹", fontSize = 28.sp) }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Box(Modifier.height(17.dp), contentAlignment = Alignment.Center) {
-                Text(
-                    expandedSubtitle,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.graphicsLayer {
-                        alpha = (1f - collapseState.fraction * 2f).coerceIn(0f, 1f)
-                    },
-                )
-                Text(
-                    compactSubtitle,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.graphicsLayer {
-                        alpha = ((collapseState.fraction - .5f) * 2f).coerceIn(0f, 1f)
-                    },
-                )
-            }
-        }
-        TextButton(onClick = onNext) { Text("›", fontSize = 28.sp) }
-    }
-}
-
-@Composable
-private fun RowScope.CalendarDay(
-    date: LocalDate,
-    selected: Boolean,
-    hasEntries: Boolean,
-    muted: Boolean,
-    onClick: (LocalDate) -> Unit,
-) {
-    Box(
-        modifier = Modifier.weight(1f).fillMaxHeight().padding(2.dp)
-            .clip(CircleShape)
-            .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
-            .clickable { onClick(date) },
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                "${date.dayOfMonth}",
-                color = when {
-                    selected -> MaterialTheme.colorScheme.onPrimary
-                    muted -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .45f)
-                    else -> MaterialTheme.colorScheme.onSurface
-                },
-                fontWeight = if (hasEntries || selected) FontWeight.Bold else FontWeight.Normal,
-            )
-            if (hasEntries) {
-                Box(
-                    Modifier.size(5.dp).clip(CircleShape)
-                        .background(if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary)
-                )
+private fun RowScope.CalendarDay(date: LocalDate,selected: Boolean,hasEntries: Boolean,muted: Boolean,onClick: (LocalDate)->Unit) {
+    val lunar=remember(date) { lunarDateLabel(date) }
+    val fontScale=LocalDensity.current.fontScale
+    val foreground=when { selected->Color.White; muted->JournalColors.Muted.copy(alpha=.48f);else->JournalColors.Ink }
+    BoxWithConstraints(Modifier.weight(1f).fillMaxHeight().clickable { onClick(date) },contentAlignment=Alignment.Center) {
+        val diameter=minOf(maxWidth-2.dp,54.dp)
+        // Keep the two-line date inside its cell even with large system text.
+        val textScale=diameter.value/54f*fontScale.coerceAtMost(1.1f)/fontScale
+        Box(Modifier.size(diameter).clip(CircleShape).background(if(selected) JournalColors.Coral else Color.Transparent),contentAlignment=Alignment.Center) {
+            Column(horizontalAlignment=Alignment.CenterHorizontally) {
+                Text(if(date==LocalDate.now()) "今" else "${date.dayOfMonth}",fontSize=(19*textScale).sp,lineHeight=(24*textScale).sp,fontWeight=FontWeight.SemiBold,color=foreground)
+                Text(lunar,fontSize=(12*textScale).sp,lineHeight=(17*textScale).sp,color=if(selected) Color.White else if(muted) JournalColors.Muted.copy(alpha=.48f) else JournalColors.Muted)
+                Box(Modifier.size(4.dp).clip(CircleShape).background(if(hasEntries) { if(selected) Color.White else JournalColors.Muted } else Color.Transparent))
             }
         }
     }
@@ -631,54 +502,39 @@ private fun RowScope.CalendarDay(
 
 @Composable
 private fun TimelineEntry(entry: DailyEntry, onDelete: (() -> Unit)? = null) {
-    Card(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(11.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
-                Box(Modifier.width(2.dp).height(54.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = .25f)))
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text(entry.memberName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(entry.time, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
-                        if (onDelete != null) {
-                            IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-                                Icon(Icons.Default.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(19.dp))
-                            }
-                        }
-                    }
+    Row(Modifier.fillMaxWidth().padding(vertical=12.dp),verticalAlignment=Alignment.Top) {
+        Box(Modifier.padding(top=5.dp).size(16.dp).border(1.4.dp,JournalColors.Gold,CircleShape))
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                Text(entry.memberName,Modifier.weight(1f),fontSize=18.sp,fontWeight=FontWeight.Medium)
+                if(onDelete!=null) IconButton(onClick=onDelete,modifier=Modifier.size(40.dp)) {
+                    JournalIcon(JournalSymbol.DELETE,"删除日报",Modifier.size(19.dp),JournalColors.Muted)
                 }
-                Text(entry.date, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.height(6.dp))
-                Text(entry.content, style = MaterialTheme.typography.bodyLarge)
             }
+            Text("${entry.date}  ${entry.time}",fontSize=13.sp,color=JournalColors.Muted)
+            Spacer(Modifier.height(6.dp))
+            Text(entry.content,style=MaterialTheme.typography.bodyLarge)
         }
     }
 }
 
 @Composable
 private fun MilestoneTimelineItem(milestone: Milestone, onDelete: (() -> Unit)? = null) {
-    Card(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(11.dp).clip(CircleShape).background(MaterialTheme.colorScheme.tertiary))
-                Box(Modifier.width(2.dp).height(48.dp).background(MaterialTheme.colorScheme.tertiary.copy(alpha = .25f)))
-            }
+    BlushCard(Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(16.dp),verticalAlignment=Alignment.Top) {
+            JournalIcon(JournalSymbol.STAR,modifier=Modifier.padding(top=4.dp).size(21.dp),color=JournalColors.Gold)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text(milestone.memberName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                    if (onDelete != null) {
-                        IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Default.Delete, contentDescription = "删除大事记", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(19.dp))
-                        }
+                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                    Text(milestone.memberName,Modifier.weight(1f),style=MaterialTheme.typography.titleMedium)
+                    if(onDelete!=null) IconButton(onClick=onDelete,modifier=Modifier.size(36.dp)) {
+                        JournalIcon(JournalSymbol.DELETE,"删除大事记",Modifier.size(18.dp),JournalColors.Muted)
                     }
                 }
-                Text(milestone.date, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary)
-                Spacer(Modifier.height(6.dp))
-                Text(milestone.content, style = MaterialTheme.typography.bodyLarge)
+                Text(milestone.date,fontSize=13.sp,color=JournalColors.Muted)
+                Spacer(Modifier.height(7.dp))
+                Text(milestone.content,style=MaterialTheme.typography.bodyLarge)
             }
         }
     }
@@ -693,10 +549,10 @@ private fun MilestonesScreen(
     val milestones = remember(refresh) { repository.allMilestones() }
     var pendingDelete by remember { mutableStateOf<Milestone?>(null) }
     if (milestones.isEmpty()) {
-        EmptyState("还没有大事记", "点击右上角 + 记录团队成员的重要时刻")
+        EmptyState("还没有大事记", "点击右下角 + 记录团队成员的重要时刻")
     } else {
         LazyColumn(
-            contentPadding = PaddingValues(14.dp, 8.dp, 14.dp, 24.dp),
+            contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 100.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item {
@@ -731,15 +587,15 @@ private fun MembersScreen(
 ) {
     val stats = remember(refresh) { repository.memberStats() }
     if (stats.isEmpty()) {
-        EmptyState("还没有团队成员", "点击右上角 + 建立档案")
+        EmptyState("还没有团队成员", "点击右下角 + 建立档案")
     } else {
         LazyColumn(
-            contentPadding = PaddingValues(14.dp, 8.dp, 14.dp, 96.dp),
+            contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 100.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
                 val achieved = stats.count { it.rewardReached }
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                BlushCard(color = JournalColors.Cream, borderColor = Color(0xFFF4E5C6)) {
                     Row(Modifier.fillMaxWidth().padding(18.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                         Column { Text("团队进度", fontWeight = FontWeight.Bold); Text("共 ${stats.size} 位成员") }
                         Column(horizontalAlignment = Alignment.End) { Text("$achieved", fontSize = 26.sp, fontWeight = FontWeight.Bold); Text("人达成 90 天") }
@@ -755,37 +611,33 @@ private fun MembersScreen(
 
 @Composable
 private fun MemberCard(stats: MemberStats, onClick: () -> Unit, onEdit: () -> Unit) {
-    Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Column(Modifier.padding(16.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center,
-                ) { Text(stats.member.name.take(1), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer) }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(stats.member.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(
-                        listOf(stats.member.major, stats.member.grade, stats.member.rank, stats.member.tag)
-                            .filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "档案待完善" },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+    BlushCard(Modifier.fillMaxWidth().clickable(onClick=onClick)) {
+        Column(Modifier.padding(17.dp)) {
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                Box(Modifier.size(53.dp).clip(CircleShape).background(JournalColors.Background),contentAlignment=Alignment.Center) {
+                    Text(stats.member.name.take(1),fontSize=23.sp,fontWeight=FontWeight.Medium)
                 }
-                IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, contentDescription = "编辑") }
+                Spacer(Modifier.width(13.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(stats.member.name,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold)
+                    Text(listOf(stats.member.major,stats.member.grade,stats.member.rank,stats.member.tag)
+                        .filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "档案待完善" },
+                        style=MaterialTheme.typography.bodySmall,color=JournalColors.Muted,maxLines=1,overflow=TextOverflow.Ellipsis)
+                }
+                IconButton(onClick=onEdit) { JournalIcon(JournalSymbol.EDIT,"编辑成员",Modifier.size(23.dp)) }
             }
-            Spacer(Modifier.height(14.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("已记录 ${stats.reportDays} / 90 天", fontWeight = FontWeight.SemiBold)
-                Text(if (stats.rewardReached) "✅ 已达成奖励" else "还差 ${(90 - stats.reportDays).coerceAtLeast(0)} 天", color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(16.dp))
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                Text("记录 ${stats.reportDays} 天",fontSize=14.sp)
+                Text(if(stats.rewardReached) "已达成 90 天" else "还差 ${90-stats.reportDays} 天",fontSize=13.sp,color=JournalColors.Muted)
             }
-            Spacer(Modifier.height(7.dp))
-            LinearProgressIndicator(
-                progress = (stats.reportDays / 90f).coerceIn(0f, 1f),
-                modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape),
-            )
-            Spacer(Modifier.height(6.dp))
-            Text("共 ${stats.reportCount} 篇日报 · 点击查看时间轴", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+            LinearProgressIndicator((stats.reportDays/90f).coerceIn(0f,1f),Modifier.fillMaxWidth().height(5.dp).clip(CircleShape),color=JournalColors.Coral,trackColor=JournalColors.Background)
+            Spacer(Modifier.height(9.dp))
+            Row(verticalAlignment=Alignment.CenterVertically) {
+                Text("${stats.reportCount} 篇日报 · 查看成长时间轴",Modifier.weight(1f),fontSize=12.sp,color=JournalColors.Muted)
+                JournalIcon(JournalSymbol.NEXT,modifier=Modifier.size(13.dp),color=JournalColors.Muted)
+            }
         }
     }
 }
@@ -811,15 +663,15 @@ private fun MemberDetailScreen(
     var deleteMilestone by remember { mutableStateOf<Milestone?>(null) }
 
     LazyColumn(
-        contentPadding = PaddingValues(14.dp, 8.dp, 14.dp, 32.dp),
+        contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 32.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+            BlushCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(member.name, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                            Text(member.name, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
                             Text(listOf(member.major, member.grade).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "档案待完善" })
                         }
                         Text("$days / 90", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
@@ -832,9 +684,9 @@ private fun MemberDetailScreen(
                     ProfileLine("标签", member.tag.ifBlank { "未设置" })
                     Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { showExport = true }, modifier = Modifier.weight(1f)) { Text("导出纪念册") }
-                        OutlinedButton(onClick = { onEdit(member) }) { Icon(Icons.Default.Edit, null); Spacer(Modifier.width(4.dp)); Text("编辑") }
-                        IconButton(onClick = { confirmDeleteMember = true }) { Icon(Icons.Default.Delete, "删除", tint = MaterialTheme.colorScheme.error) }
+                        JournalButton(onClick = { showExport = true }, modifier = Modifier.weight(1f)) { Text("导出纪念册") }
+                        JournalOutlinedButton(onClick = { onEdit(member) }) { JournalIcon(JournalSymbol.EDIT, modifier = Modifier.size(19.dp)); Spacer(Modifier.width(4.dp)); Text("编辑") }
+                        IconButton(onClick = { confirmDeleteMember = true }) { JournalIcon(JournalSymbol.DELETE, "删除成员", Modifier.size(22.dp), JournalColors.Muted) }
                     }
                 }
             }
@@ -842,14 +694,14 @@ private fun MemberDetailScreen(
         item {
             Text("个人大事记 · ${milestones.size} 条", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
         }
-        if (milestones.isEmpty()) item { EmptyState("还没有大事记", "可在“大事记”页点击右上角 + 添加", compact = true) }
+        if (milestones.isEmpty()) item { EmptyState("还没有大事记", "可在“大事记”页点击右下角 + 添加", compact = true) }
         items(milestones, key = { "milestone-${it.id}" }) { milestone ->
             MilestoneTimelineItem(milestone) { deleteMilestone = milestone }
         }
         item {
             Text("日报时间轴 · ${entries.size} 篇", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp))
         }
-        if (entries.isEmpty()) item { EmptyState("还没有日报", "在日报页点击右上角 + 进行录入", compact = true) }
+        if (entries.isEmpty()) item { EmptyState("还没有日报", "在日报页点击右下角 + 进行录入", compact = true) }
         items(entries, key = { it.id }) { entry -> TimelineEntry(entry) { deleteEntry = entry } }
     }
 
@@ -889,47 +741,69 @@ private fun MemberDetailScreen(
 @Composable
 private fun ProfileLine(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
-        Text("$label：", fontWeight = FontWeight.SemiBold, modifier = Modifier.width(92.dp))
+        Text("$label：", color = JournalColors.Muted, modifier = Modifier.width((92f * LocalDensity.current.fontScale.coerceAtMost(1.4f)).dp))
         Text(value, Modifier.weight(1f))
     }
 }
 
 @Composable
-private fun SettingsScreen(onBackup: () -> Unit, onSaveBackup: () -> Unit, onRestore: () -> Unit) {
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-            Column(Modifier.padding(18.dp)) {
-                Text("数据保护", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                Text("直接覆盖安装新版本时，本地数据会自动保留。卸载 App 会清除本地数据，因此建议定期导出备份。")
+private fun SettingsScreen(repository: DailyRepository, refresh: Int, onBackup: () -> Unit, onSaveBackup: () -> Unit, onRestore: () -> Unit) {
+    val stats=remember(refresh) { repository.memberStats() }
+    val milestoneCount=remember(refresh) { repository.allMilestones().size }
+    var showProtection by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        Box(Modifier.fillMaxWidth().height(280.dp)) {
+            Box(Modifier.fillMaxWidth().height(190.dp).clip(RoundedCornerShape(bottomStart=40.dp,bottomEnd=40.dp)).background(JournalColors.Hero))
+            BlushCard(Modifier.align(Alignment.BottomCenter).padding(horizontal=16.dp,vertical=12.dp).fillMaxWidth()) {
+                Row(Modifier.padding(start=23.dp,end=20.dp,top=19.dp,bottom=12.dp),verticalAlignment=Alignment.CenterVertically) {
+                    Box(Modifier.size(67.dp).clip(CircleShape).background(JournalColors.Background),contentAlignment=Alignment.Center) {
+                        FruitIcon(Fruit.PEACH,false,Modifier.size(55.dp))
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("日报纪念册",fontSize=22.sp,fontWeight=FontWeight.Bold)
+                        Spacer(Modifier.height(4.dp))
+                        Text("记录每一天的成长",fontSize=13.sp,color=JournalColors.Muted)
+                    }
+                    JournalIcon(JournalSymbol.BELL,modifier=Modifier.size(25.dp),color=JournalColors.Gold)
+                }
+                Row(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=14.dp)) {
+                    JournalStat("${stats.size}","团队成员",Modifier.weight(1f))
+                    JournalStat("${stats.sumOf { it.reportCount }}","收集日报",Modifier.weight(1f))
+                    JournalStat("$milestoneCount","重要时刻",Modifier.weight(1f))
+                }
             }
         }
-        Card {
-            Column(Modifier.padding(18.dp)) {
-                Text("完整备份", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("将成员档案、标签、全部日报和大事记打包为 .rhb 文件，导出后直接打开微信分享，也可另存到本机或网盘。", modifier = Modifier.padding(vertical = 8.dp))
-                Button(onClick = onBackup, modifier = Modifier.fillMaxWidth()) { Text("导出完整备份（微信分享）") }
-                OutlinedButton(onClick = onSaveBackup, modifier = Modifier.fillMaxWidth()) { Text("另存备份到本机或网盘") }
+        Column(Modifier.padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(13.dp)) {
+            BlushCard(Modifier.fillMaxWidth(),JournalColors.Cream,Color(0xFFF4E5C6)) {
+                Row(Modifier.padding(17.dp),verticalAlignment=Alignment.CenterVertically) {
+                    JournalIcon(JournalSymbol.SHIELD,modifier=Modifier.size(34.dp),color=JournalColors.Gold)
+                    Spacer(Modifier.width(16.dp))
+                    Column {
+                        Text("本地数据保护",fontSize=18.sp,fontWeight=FontWeight.SemiBold,color=JournalColors.GoldInk)
+                        Text("离线记录 · 无需注册登录",fontSize=13.sp,color=JournalColors.GoldInk)
+                    }
+                }
             }
-        }
-        Card {
-            Column(Modifier.padding(18.dp)) {
-                Text("恢复备份", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("重新安装或更换手机后，选择之前导出的 .rhb 文件即可恢复。恢复前会二次确认。", modifier = Modifier.padding(vertical = 8.dp))
-                OutlinedButton(onClick = onRestore, modifier = Modifier.fillMaxWidth()) { Text("选择备份并恢复") }
+            BlushCard(Modifier.fillMaxWidth()) {
+                SettingsRow("导出完整备份","生成 .rhb 文件并分享到微信",JournalSymbol.UPLOAD,Color(0xFF8970E8),onBackup)
+                Divider(Modifier.padding(horizontal=14.dp),color=JournalColors.Border.copy(alpha=.65f))
+                SettingsRow("另存到本机或网盘","保存一份完整的数据备份",JournalSymbol.FOLDER,Color(0xFFFFB544),onSaveBackup)
             }
-        }
-        Card {
-            Column(Modifier.padding(18.dp)) {
-                Text("安全更新步骤", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("1. 更新前导出一份完整备份\n2. 不要先卸载旧版\n3. 直接安装同一应用的新版 APK\n4. 打开后抽查几位成员的日报")
+            BlushCard(Modifier.fillMaxWidth()) {
+                SettingsRow("恢复备份","导入之前保存的 .rhb 文件",JournalSymbol.DOWNLOAD,Color(0xFF41AEF1),onRestore)
+                Divider(Modifier.padding(horizontal=14.dp),color=JournalColors.Border.copy(alpha=.65f))
+                SettingsRow("更新与数据保护",null,JournalSymbol.SHIELD,Color(0xFF1CCCB6)) { showProtection=true }
             }
+            Text("日报纪念册 · ${BuildConfig.VERSION_NAME}",Modifier.fillMaxWidth().padding(vertical=13.dp),textAlign=TextAlign.Center,fontSize=12.sp,color=JournalColors.Muted)
         }
-        Text("日报纪念册 · 版本 ${BuildConfig.VERSION_NAME}", Modifier.fillMaxWidth(), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+    if(showProtection) JournalDialog(
+        onDismissRequest={showProtection=false},
+        title={Text("更新与数据保护")},
+        text={Text("成员、标签、日报和大事记均保存在当前手机。\n\n建议定期导出完整备份。更新时直接覆盖安装同签名的新版 APK，不要先卸载旧版。\n\n卸载应用会清除本地数据，换机后可导入 .rhb 备份恢复。")},
+        confirmButton={JournalButton(onClick={showProtection=false}) { Text("知道了") }},
+    )
 }
 
 @Composable
@@ -946,7 +820,7 @@ private fun EntryDialog(
     var content by remember { mutableStateOf("") }
     var showMemberChoices by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    JournalDialog(
         onDismissRequest = onDismiss,
         title = { Text("添加日报") },
         text = {
@@ -957,7 +831,7 @@ private fun EntryDialog(
                     }
                 } else {
                     Box {
-                        OutlinedButton(onClick = { showMemberChoices = true }, modifier = Modifier.fillMaxWidth()) {
+                        JournalOutlinedButton(onClick = { showMemberChoices = true }, modifier = Modifier.fillMaxWidth()) {
                             Text("成员：${members.firstOrNull { it.id == memberId }?.name ?: "请选择"}")
                         }
                         androidx.compose.material3.DropdownMenu(expanded = showMemberChoices, onDismissRequest = { showMemberChoices = false }) {
@@ -971,11 +845,11 @@ private fun EntryDialog(
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
+                    JournalOutlinedButton(
                         onClick = { showDatePicker(context, date) { date = it } },
                         modifier = Modifier.weight(1f),
                     ) { Text(date.toString()) }
-                    OutlinedButton(
+                    JournalOutlinedButton(
                         onClick = { showTimePicker(context, time) { time = it } },
                         modifier = Modifier.weight(1f),
                     ) { Text(time.format(DateTimeFormatter.ofPattern("HH:mm"))) }
@@ -992,7 +866,7 @@ private fun EntryDialog(
             }
         },
         confirmButton = {
-            Button(
+            JournalButton(
                 enabled = members.isNotEmpty() && content.isNotBlank(),
                 onClick = {
                     onSave(
@@ -1022,7 +896,7 @@ private fun MilestoneDialog(
     var content by remember { mutableStateOf("") }
     var showMemberChoices by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    JournalDialog(
         onDismissRequest = onDismiss,
         title = { Text("添加大事记") },
         text = {
@@ -1033,7 +907,7 @@ private fun MilestoneDialog(
                     }
                 } else {
                     Box {
-                        OutlinedButton(onClick = { showMemberChoices = true }, modifier = Modifier.fillMaxWidth()) {
+                        JournalOutlinedButton(onClick = { showMemberChoices = true }, modifier = Modifier.fillMaxWidth()) {
                             Text("成员：${members.firstOrNull { it.id == memberId }?.name ?: "请选择"}")
                         }
                         androidx.compose.material3.DropdownMenu(expanded = showMemberChoices, onDismissRequest = { showMemberChoices = false }) {
@@ -1046,7 +920,7 @@ private fun MilestoneDialog(
                         }
                     }
                 }
-                OutlinedButton(onClick = { showDatePicker(context, date) { date = it } }, modifier = Modifier.fillMaxWidth()) {
+                JournalOutlinedButton(onClick = { showDatePicker(context, date) { date = it } }, modifier = Modifier.fillMaxWidth()) {
                     Text("日期：$date")
                 }
                 OutlinedTextField(
@@ -1061,7 +935,7 @@ private fun MilestoneDialog(
             }
         },
         confirmButton = {
-            Button(
+            JournalButton(
                 enabled = members.isNotEmpty() && content.isNotBlank(),
                 onClick = {
                     onSave(
@@ -1098,7 +972,7 @@ private fun MemberDialog(
     var showNewTagDialog by remember { mutableStateOf(false) }
     var newTag by remember { mutableStateOf("") }
 
-    AlertDialog(
+    JournalDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (member == null) "添加成员" else "编辑成员") },
         text = {
@@ -1106,11 +980,11 @@ private fun MemberDialog(
                 OutlinedTextField(name, { name = it }, label = { Text("姓名 *") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(major, { major = it }, label = { Text("专业") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(grade, { grade = it }, label = { Text("年级") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedButton(onClick = { showDatePicker(context, joinedDate) { joinedDate = it } }, modifier = Modifier.fillMaxWidth()) {
+                JournalOutlinedButton(onClick = { showDatePicker(context, joinedDate) { joinedDate = it } }, modifier = Modifier.fillMaxWidth()) {
                     Text("加入时间：$joinedDate")
                 }
                 Box {
-                    OutlinedButton(onClick = { showRankChoices = true }, modifier = Modifier.fillMaxWidth()) {
+                    JournalOutlinedButton(onClick = { showRankChoices = true }, modifier = Modifier.fillMaxWidth()) {
                         Text("职级：${rank.ifBlank { "请选择" }}")
                     }
                     androidx.compose.material3.DropdownMenu(expanded = showRankChoices, onDismissRequest = { showRankChoices = false }) {
@@ -1123,7 +997,7 @@ private fun MemberDialog(
                     }
                 }
                 Box {
-                    OutlinedButton(onClick = { showTagChoices = true }, modifier = Modifier.fillMaxWidth()) {
+                    JournalOutlinedButton(onClick = { showTagChoices = true }, modifier = Modifier.fillMaxWidth()) {
                         Text("标签：${tag.ifBlank { "未设置" }}")
                     }
                     androidx.compose.material3.DropdownMenu(expanded = showTagChoices, onDismissRequest = { showTagChoices = false }) {
@@ -1146,7 +1020,7 @@ private fun MemberDialog(
             }
         },
         confirmButton = {
-            Button(
+            JournalButton(
                 enabled = name.isNotBlank(),
                 onClick = {
                     onSave(
@@ -1168,7 +1042,7 @@ private fun MemberDialog(
     )
 
     if (showNewTagDialog) {
-        AlertDialog(
+        JournalDialog(
             onDismissRequest = { showNewTagDialog = false; newTag = "" },
             title = { Text("新建标签") },
             text = {
@@ -1181,7 +1055,7 @@ private fun MemberDialog(
                 )
             },
             confirmButton = {
-                Button(
+                JournalButton(
                     enabled = newTag.isNotBlank(),
                     onClick = {
                         tag = onAddTag(newTag)
@@ -1199,14 +1073,14 @@ private fun MemberDialog(
 
 @Composable
 private fun ExportFormatDialog(member: Member, onDismiss: () -> Unit, onSelect: (ExportFormat) -> Unit) {
-    AlertDialog(
+    JournalDialog(
         onDismissRequest = onDismiss,
         title = { Text("导出 ${member.name} 的纪念册") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Text("导出内容包含个人档案、大事记、统计与全部日报时间轴。选择任意格式后直接打开微信，以文件形式分享。")
                 ExportFormat.values().forEach { format ->
-                    OutlinedButton(onClick = { onSelect(format) }, modifier = Modifier.fillMaxWidth()) {
+                    JournalOutlinedButton(onClick = { onSelect(format) }, modifier = Modifier.fillMaxWidth()) {
                         Text("${format.label}  (.${format.extension}) · 微信分享")
                     }
                 }
@@ -1219,25 +1093,24 @@ private fun ExportFormatDialog(member: Member, onDismiss: () -> Unit, onSelect: 
 
 @Composable
 private fun ConfirmDialog(title: String, text: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
-    AlertDialog(
+    JournalDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { Text(text) },
-        confirmButton = { Button(onClick = onConfirm) { Text("确认删除") } },
+        confirmButton = { JournalButton(onClick = onConfirm) { Text("确认删除") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }
 
 @Composable
 private fun EmptyState(title: String, subtitle: String, compact: Boolean = false) {
-    Box(
-        Modifier.fillMaxWidth().then(if (compact) Modifier.padding(24.dp) else Modifier.fillMaxHeight()).padding(24.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
-            Spacer(Modifier.height(8.dp))
-            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+    Box(Modifier.fillMaxWidth().then(if(compact) Modifier else Modifier.fillMaxHeight()).padding(22.dp),contentAlignment=Alignment.Center) {
+        Column(horizontalAlignment=Alignment.CenterHorizontally) {
+            EmptyJournalIllustration(Modifier.size(if(compact) 72.dp else 142.dp))
+            Spacer(Modifier.height(10.dp))
+            Text(title,fontSize=if(compact) 16.sp else 18.sp,color=JournalColors.Ink.copy(alpha=.78f),textAlign=TextAlign.Center)
+            Spacer(Modifier.height(7.dp))
+            Text(subtitle,fontSize=14.sp,color=JournalColors.Muted,textAlign=TextAlign.Center)
         }
     }
 }
