@@ -3,6 +3,7 @@ package com.dailymemory.app
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -179,10 +180,11 @@ private fun DailyMemoryApp(repository: DailyRepository) {
     SideEffect {
         window?.let {
             it.statusBarColor = (if (tab == MainTab.SETTINGS && selectedMemberId == 0L) JournalColors.Hero else JournalColors.Background).toArgb()
-            it.navigationBarColor = Color.White.toArgb()
+            val lightNavigation = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1
+            it.navigationBarColor = (if (lightNavigation) Color.White else JournalColors.Ink).toArgb()
             WindowInsetsControllerCompat(it, it.decorView).apply {
                 isAppearanceLightStatusBars = true
-                isAppearanceLightNavigationBars = true
+                isAppearanceLightNavigationBars = lightNavigation
             }
         }
     }
