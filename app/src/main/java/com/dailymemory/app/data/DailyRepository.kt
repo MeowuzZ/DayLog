@@ -5,6 +5,7 @@ import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.io.OutputStream
 import java.time.Instant
 import java.time.ZoneId
 import java.util.zip.ZipEntry
@@ -60,6 +61,12 @@ class DailyRepository(context: Context) {
     }
 
     fun writeBackup(uri: Uri): BackupSummary {
+        return appContext.contentResolver.openOutputStream(uri, "w")!!.use { output ->
+            writeBackup(output)
+        }
+    }
+
+    fun writeBackup(output: OutputStream): BackupSummary {
         val members = db.members()
         val entries = db.allEntries()
         val milestones = db.allMilestones()
@@ -74,12 +81,10 @@ class DailyRepository(context: Context) {
             put("tags", JSONArray().apply { tags.forEach { put(it) } })
         }.toString(2)
 
-        appContext.contentResolver.openOutputStream(uri, "w")!!.use { output ->
-            ZipOutputStream(output).use { zip ->
-                zip.putNextEntry(ZipEntry("backup.json"))
-                zip.write(json.toByteArray(Charsets.UTF_8))
-                zip.closeEntry()
-            }
+        ZipOutputStream(output).use { zip ->
+            zip.putNextEntry(ZipEntry("backup.json"))
+            zip.write(json.toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
         }
         return BackupSummary(members.size, entries.size, milestones.size)
     }

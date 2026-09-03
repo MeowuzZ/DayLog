@@ -2,8 +2,6 @@ package com.dailymemory.app
 
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
-import android.content.ClipData
-import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
@@ -87,7 +85,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
 import com.dailymemory.app.data.BackupSummary
 import com.dailymemory.app.data.DailyEntry
 import com.dailymemory.app.data.DailyRepository
@@ -96,12 +93,12 @@ import com.dailymemory.app.data.Member
 import com.dailymemory.app.data.MemberStats
 import com.dailymemory.app.data.Milestone
 import com.dailymemory.app.export.ExportService
+import com.dailymemory.app.export.WeChatShareService
 import com.dailymemory.app.ui.DailyMemoryTheme
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
-import java.io.File
 import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
@@ -116,7 +113,6 @@ private enum class MainTab(val label: String) {
     HOME("日报"), MEMBERS("成员"), MILESTONES("大事记"), SETTINGS("数据")
 }
 private val RANK_LEVELS = listOf("T0", "T1-1", "T1-2", "T1-3", "T2-1", "T2-2", "T2-3", "T3-1", "T3-2", "T3-3")
-private data class PendingExport(val member: Member, val format: ExportFormat)
 
 @Stable
 private class CalendarCollapseState(val maxOffsetPx: Float) {
@@ -135,31 +131,10 @@ private fun DailyMemoryApp(repository: DailyRepository) {
     var showMemberDialog by remember { mutableStateOf(false) }
     var showMilestoneDialog by remember { mutableStateOf(false) }
     var editingMember by remember { mutableStateOf<Member?>(null) }
-    var pendingExport by remember { mutableStateOf<PendingExport?>(null) }
     var restoreCandidate by remember { mutableStateOf<Pair<android.net.Uri, BackupSummary>?>(null) }
     var selectedJournalDateText by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
 
     fun notify(message: String) = Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-
-    val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("*/*")
-    ) { uri ->
-        val request = pendingExport
-        if (uri != null && request != null) {
-            runCatching {
-                ExportService.write(
-                    context,
-                    uri,
-                    request.format,
-                    request.member,
-                    repository.entriesForMember(request.member.id),
-                    repository.milestonesForMember(request.member.id),
-                )
-            }.onSuccess { notify("已导出 ${request.member.name} 的${request.format.label}文件") }
-                .onFailure { notify("导出失败：${it.message}") }
-        }
-        pendingExport = null
-    }
 
     val backupLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
@@ -263,20 +238,22 @@ private fun DailyMemoryApp(repository: DailyRepository) {
                     onEdit = { editingMember = it; showMemberDialog = true },
                     onDeleted = { refresh++; selectedMemberId = 0L },
                     onExport = { member, format ->
-                        if (format == ExportFormat.DOCX) {
-                            runCatching {
-                                shareWordToWeChat(
-                                    context = context,
-                                    member = member,
-                                    entries = repository.entriesForMember(member.id),
-                                    milestones = repository.milestonesForMember(member.id),
+                        runCatching {
+                            WeChatShareService.share(
+                                context,
+                                ExportService.suggestedName(member, format),
+                                format.mimeType,
+                            ) { output ->
+                                ExportService.write(
+                                    output,
+                                    format,
+                                    member,
+                                    repository.entriesForMember(member.id),
+                                    repository.milestonesForMember(member.id),
                                 )
-                            }.onSuccess { notify("正在打开微信……") }
-                                .onFailure { notify(it.message ?: "无法打开微信分享") }
-                        } else {
-                            pendingExport = PendingExport(member, format)
-                            exportLauncher.launch(ExportService.suggestedName(member, format))
-                        }
+                            }
+                        }.onSuccess { notify("正在打开微信……") }
+                            .onFailure { notify(it.message ?: "无法打开微信分享") }
                     },
                     onEntryDeleted = { refresh++ },
                     onMilestoneDeleted = { refresh++ },
@@ -299,7 +276,17 @@ private fun DailyMemoryApp(repository: DailyRepository) {
                     onDelete = { repository.deleteMilestone(it.id); refresh++ },
                 )
                 else -> SettingsScreen(
-                    onBackup = { backupLauncher.launch("日报纪念册备份_${LocalDate.now()}.rhb") },
+                    onBackup = {
+                        runCatching {
+                            WeChatShareService.share(
+                                context,
+                                "日报纪念册备份_${LocalDate.now()}.rhb",
+                                "application/octet-stream",
+                            ) { output -> repository.writeBackup(output) }
+                        }.onSuccess { notify("备份已生成，正在打开微信……") }
+                            .onFailure { notify(it.message ?: "无法打开微信分享") }
+                    },
+                    onSaveBackup = { backupLauncher.launch("日报纪念册备份_${LocalDate.now()}.rhb") },
                     onRestore = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) },
                 )
             }
@@ -908,7 +895,7 @@ private fun ProfileLine(label: String, value: String) {
 }
 
 @Composable
-private fun SettingsScreen(onBackup: () -> Unit, onRestore: () -> Unit) {
+private fun SettingsScreen(onBackup: () -> Unit, onSaveBackup: () -> Unit, onRestore: () -> Unit) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -923,8 +910,9 @@ private fun SettingsScreen(onBackup: () -> Unit, onRestore: () -> Unit) {
         Card {
             Column(Modifier.padding(18.dp)) {
                 Text("完整备份", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("将成员档案、标签、全部日报和大事记打包为 .rhb 文件，可保存到本机、网盘或移动硬盘。", modifier = Modifier.padding(vertical = 8.dp))
-                Button(onClick = onBackup, modifier = Modifier.fillMaxWidth()) { Text("导出完整备份") }
+                Text("将成员档案、标签、全部日报和大事记打包为 .rhb 文件，导出后直接打开微信分享，也可另存到本机或网盘。", modifier = Modifier.padding(vertical = 8.dp))
+                Button(onClick = onBackup, modifier = Modifier.fillMaxWidth()) { Text("导出完整备份（微信分享）") }
+                OutlinedButton(onClick = onSaveBackup, modifier = Modifier.fillMaxWidth()) { Text("另存备份到本机或网盘") }
             }
         }
         Card {
@@ -1216,13 +1204,10 @@ private fun ExportFormatDialog(member: Member, onDismiss: () -> Unit, onSelect: 
         title = { Text("导出 ${member.name} 的纪念册") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text("导出内容包含个人档案、大事记、统计与全部日报时间轴。")
+                Text("导出内容包含个人档案、大事记、统计与全部日报时间轴。选择任意格式后直接打开微信，以文件形式分享。")
                 ExportFormat.values().forEach { format ->
                     OutlinedButton(onClick = { onSelect(format) }, modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            if (format == ExportFormat.DOCX) "Word（微信分享）"
-                            else "${format.label}  (.${format.extension})"
-                        )
+                        Text("${format.label}  (.${format.extension}) · 微信分享")
                     }
                 }
             }
@@ -1256,38 +1241,6 @@ private fun EmptyState(title: String, subtitle: String, compact: Boolean = false
         }
     }
 }
-
-private fun shareWordToWeChat(
-    context: Context,
-    member: Member,
-    entries: List<DailyEntry>,
-    milestones: List<Milestone>,
-) {
-    val exportDirectory = File(context.cacheDir, "shared_exports").apply { mkdirs() }
-    val exportFile = File(exportDirectory, ExportService.suggestedName(member, ExportFormat.DOCX))
-    exportFile.outputStream().use { output ->
-        ExportService.write(output, ExportFormat.DOCX, member, entries, milestones)
-    }
-    val contentUri = FileProvider.getUriForFile(
-        context,
-        "${context.packageName}.fileprovider",
-        exportFile,
-    )
-    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-        type = ExportFormat.DOCX.mimeType
-        setPackage(WECHAT_PACKAGE)
-        putExtra(Intent.EXTRA_STREAM, contentUri)
-        putExtra(Intent.EXTRA_TITLE, exportFile.name)
-        clipData = ClipData.newUri(context.contentResolver, exportFile.name, contentUri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    require(shareIntent.resolveActivity(context.packageManager) != null) {
-        "未检测到微信，请安装并登录微信后再试"
-    }
-    context.startActivity(shareIntent)
-}
-
-private const val WECHAT_PACKAGE = "com.tencent.mm"
 
 private fun showDatePicker(context: android.content.Context, current: LocalDate, onSelected: (LocalDate) -> Unit) {
     DatePickerDialog(
