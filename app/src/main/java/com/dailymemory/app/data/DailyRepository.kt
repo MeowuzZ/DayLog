@@ -45,6 +45,12 @@ class DailyRepository(context: Context) {
 
     fun deleteEntry(id: Long) = db.deleteEntry(id)
 
+    fun addImportedEntry(entry: DailyEntry): Boolean {
+        require(db.member(entry.memberId) != null) { "所选成员已不存在，请重新选择" }
+        require(entry.content.isNotBlank()) { "日报内容不能为空" }
+        return db.insertImportedEntry(entry)
+    }
+
     fun addMilestone(milestone: Milestone): Long {
         require(milestone.memberId > 0) { "请选择团队成员" }
         require(milestone.content.isNotBlank()) { "请填写大事记内容" }
