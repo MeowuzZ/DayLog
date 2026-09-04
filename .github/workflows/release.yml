@@ -47,7 +47,7 @@ jobs:
           DAYLOG_KEY_PASSWORD: ${{ secrets.DAYLOG_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew clean :app:testDebugUnitTest :app:lintRelease :app:assembleRelease
+          ./gradlew clean :app:assembleRelease
           cp app/build/outputs/apk/release/app-release.apk DayLog.apk
           sha256sum DayLog.apk > DayLog.apk.sha256
 

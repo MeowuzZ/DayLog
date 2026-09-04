@@ -16,8 +16,8 @@ android {
         applicationId = "com.dailymemory.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 8
-        versionName = "1.4.0"
+        versionCode = 7
+        versionName = "1.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -40,10 +40,6 @@ android {
     }
 
     buildTypes {
-        debug {
-            applicationIdSuffix = ".importtest"
-            versionNameSuffix = "-import-test"
-        }
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("release")

@@ -42,8 +42,8 @@ Android 8.0 及以上版本可安装。安装新版本时请直接覆盖安装�
 
 ## 自动化
 
-- 提交到 `main` 或创建 Pull Request 时，`Android CI` 会自动运行单元测试、编译、检查并上传调试 APK 作为 Actions 产物。
-- 推送 `v*` 标签时，`Publish Android release` 会再次测试和检查，构建固定签名的 APK，验证签名，并发布为 GitHub Release 的 `DayLog.apk` 及 SHA-256 校验文件。
+- 提交到 `main` 或创建 Pull Request 时，`Android CI` 会自动编译、检查并上传调试 APK 作为 Actions 产物。
+- 推送 `v*` 标签时，`Publish Android release` 会构建固定签名的 APK，验证签名，并发布为 GitHub Release 的 `DayLog.apk` 及 SHA-256 校验文件。
 - Release 工作流需在仓库 Secrets 中配置 `DAYLOG_KEYSTORE_BASE64`、`DAYLOG_KEYSTORE_PASSWORD`、`DAYLOG_KEY_ALIAS` 和 `DAYLOG_KEY_PASSWORD`。
 
 ## 技术结构
@@ -69,9 +69,3 @@ Android 8.0 及以上版本可安装。安装新版本时请直接覆盖安装�
 ## 许可证
 
 本项目使用 [MIT License](LICENSE)。
-
-## 微信日报导入
-
-v1.4.0 增加了用户主动授权的微信屏幕提取、卡片审核、昵称与成员的最近匹配、退出清理和聊天文本备用导入。真实微信的界面可读取性会随微信和手机系统版本变化，因此软件会要求用户逐条核对昵称与时间，不能把屏幕读取视为完整聊天历史接口。
-
-[查看日报导入使用说明](docs/chat-import.md)。开发调试包使用独立包名 `com.dailymemory.app.importtest`，可与正式版并存且不会读写正式版数据。

@@ -1,6 +1,3 @@
 <resources>
     <string name="app_name">日报纪念册</string>
-    <string name="chat_capture_name">日报导入屏幕读取</string>
-    <string name="chat_capture_description">仅在你主动开始导入后读取所选微信群的可见文字，并向前翻页提取候选日报。需要在软件内再次确认后才保存。退出导入会清空尚未处理的候选内容；不读取其他应用、不发送消息、不删除微信聊天、不上传聊天记录。</string>
-    <string name="chat_capture_overlay_status">日报导入 · %1$s\n%2$s</string>
 </resources>

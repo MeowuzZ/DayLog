@@ -79,7 +79,6 @@ import com.dailymemory.app.data.MemberStats
 import com.dailymemory.app.data.Milestone
 import com.dailymemory.app.export.ExportService
 import com.dailymemory.app.export.WeChatShareService
-import com.dailymemory.app.importer.ChatImportActivity
 import com.dailymemory.app.ui.*
 import android.app.Activity
 import androidx.compose.runtime.SideEffect
@@ -132,15 +131,6 @@ private fun DailyMemoryApp(repository: DailyRepository) {
     var selectedJournalDateText by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
 
     fun notify(message: String) = Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-
-    val journalImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        refresh++
-        if (result.resultCode == Activity.RESULT_OK) {
-            tab = MainTab.HOME
-            selectedMemberId = 0L
-            selectedJournalDateText = LocalDate.now().toString()
-        }
-    }
 
     val backupLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
@@ -271,7 +261,6 @@ private fun DailyMemoryApp(repository: DailyRepository) {
                 else -> SettingsScreen(
                     repository = repository,
                     refresh = refresh,
-                    onImportReports = { journalImportLauncher.launch(Intent(context, ChatImportActivity::class.java)) },
                     onBackup = {
                         runCatching {
                             WeChatShareService.share(
@@ -760,7 +749,7 @@ private fun ProfileLine(label: String, value: String) {
 }
 
 @Composable
-private fun SettingsScreen(repository: DailyRepository, refresh: Int, onBackup: () -> Unit, onSaveBackup: () -> Unit, onRestore: () -> Unit, onImportReports: () -> Unit) {
+private fun SettingsScreen(repository: DailyRepository, refresh: Int, onBackup: () -> Unit, onSaveBackup: () -> Unit, onRestore: () -> Unit) {
     val stats=remember(refresh) { repository.memberStats() }
     val milestoneCount=remember(refresh) { repository.allMilestones().size }
     var showProtection by remember { mutableStateOf(false) }
@@ -797,9 +786,6 @@ private fun SettingsScreen(repository: DailyRepository, refresh: Int, onBackup: 
                         Text("离线记录 · 无需注册登录",fontSize=13.sp,color=JournalColors.GoldInk)
                     }
                 }
-            }
-            BlushCard(Modifier.fillMaxWidth()) {
-                SettingsRow("从微信导入日报","选择群聊和时间范围，逐条审核导入",JournalSymbol.DOWNLOAD,Color(0xFF1CCCB6),onImportReports)
             }
             BlushCard(Modifier.fillMaxWidth()) {
                 SettingsRow("导出完整备份","生成 .rhb 文件并分享到微信",JournalSymbol.UPLOAD,Color(0xFF8970E8),onBackup)

@@ -81,21 +81,6 @@ class DailyDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, null,
         "daily_entries", null, entry.values(includeId = false)
     )
 
-    fun insertImportedEntry(entry: DailyEntry): Boolean {
-        var inserted = false
-        writableDatabase.inTransaction {
-            val exists = rawQuery(
-                "SELECT 1 FROM daily_entries WHERE member_id = ? AND entry_date = ? AND substr(entry_time || ':00', 1, 8) = ? AND content = ? LIMIT 1",
-                arrayOf(entry.memberId.toString(), entry.date, entry.time, entry.content.trim()),
-            ).use { it.moveToFirst() }
-            if (!exists) {
-                insertOrThrow("daily_entries", null, entry.values(includeId = false))
-                inserted = true
-            }
-        }
-        return inserted
-    }
-
     fun deleteEntry(id: Long) {
         writableDatabase.delete("daily_entries", "id = ?", arrayOf(id.toString()))
     }
